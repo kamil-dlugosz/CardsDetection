@@ -1,0 +1,81 @@
+### GENERAL INFO ###
+
+# pictures of cards sets naming
+
+  rank+suit/ranks-lighting-deck-number.jpg
+
+  ex. AS-01-02-03.jpg => ace of spades, good lighting, cards from second deck, picture number 3
+
+  2, 3, 4, 5, 6, 7, 8, 9, T, J, Q, K, A - ranks
+  S, H, C, D - spades, hearts, clubs, diamonds
+
+  26 - all cards with rank between 2 and 6
+  7T - all cards with rank between 7 and 10
+  JA - all cards with rank between J and A
+
+  01 - good lighting
+  02 - average lighting
+  03 - bad lighting
+
+  used letters: A, C, D, H, J, K, Q, S, T
+  free letters: B, E, F, G, I, L, M, N, O, P, R, U, V, W, X, Y, Z
+
+  used digits: 2, 3, 4, 5, 6, 7, 8, 9
+  free digits: 0, 1
+
+
+# convert voc to yolo format annotation
+put voc2yolo.py in 'darknet/build/darknet/x64/data/' folder before using
+change some things inside, like folder idk
+
+# count yolo classes in database
+put count_classes.py in 'darknet/build/darknet/x64/' folder before using
+counts the number of the individual classes' occurrences in yolo labels, based ob contents of files 'data/train.txt' and 'data/valid.txt'
+
+# MISTAKE !!!
+Network has mAP < 92,3% bc it's not trained or 'TS', 'TH', 'TC', 'TD' classes => individual mAP = 0% => overall mAP decrases by almost 7,7% => max achievable mAP = 92,3% => :'(
+It's due to mistake in voc2yolo.py script. In VOC format class names for 10 of smth are called '10S', '10H', '10C', '10D', but in YOLO they are called 'TS', 'TH', 'TC', 'TD'.
+
+
+### IMPORTANT COMMANDS ###
+
+# test darknet
+in main 'darknet/' folder
+./darknet detect cfg/yolov4.cfg yolov4.weights data/dog.jpg
+
+# train darknet
+in main 'darknet/' folder
+./darknet detector train build/darknet/x64/data/obj.data build/darknet/x64/yolo-obj.cfg build/darknet/x64/yolov4.conv.137 -map -gpus 0 | tee results.log
+
+# darknet folders
+remember to use 'build/darknet/x64/data/' folders instead of 'data/'
+remember to use '/' instead of '\'
+
+# create venv
+python3.8 -m virtualenv env_default
+
+# test darknet photo and video (in darknet folder)
+python darknet_images.py --input /home/kamil/Beng/python-scripts/datasets/test_dataset --weights /home/kamil/Beng/model/yolo.weights --config_file /home/kamil/Beng/darknet/build/darknet/x64/yolo-obj.cfg --data_file /home/kamil/Beng/darknet/build/darknet/x64/data/obj.data
+
+python darknet_video.py --input 0 --weights /home/kamil/Beng/model/yolo.weights --config_file /home/kamil/Beng/darknet/build/darknet/x64/yolo-obj.cfg --data_file /home/kamil/Beng/darknet/build/darknet/x64/data/obj.data
+
+
+### IMPORTANT LINKS ###
+
+# install cuda
+https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html
+
+# install cudnn
+https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html
+
+# install cuda, cudnn, opencv, darknet for dummies
+https://saferauto.home.blog/2019/04/06/4o-how-to-install-yolo-darknet-with-cuda-and-opencv-in-ubuntu/
+
+# yolo v4 on Google Colab
+https://colab.research.google.com/drive/1o-XcrepS-itbKZIX6rpNbdu2VCsabMOe?usp=sharing
+
+# darknet git & install
+https://github.com/AlexeyAB/darknet
+
+# darknet new site
+https://darknet.gong.im/

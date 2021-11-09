@@ -1,0 +1,30 @@
+# DARKNET
+darknet/*
+
+# VENV
+env_default/*
+
+# MODELS
+model*
+!model_30_09_2021/yolo-obj_best.weights
+
+# ETC
+etc/*
+
+# DATASETS
+datasets/*
+!datasets/x64/yolo-obj.cfg
+!datasets/x64/data/obj.data
+!datasets/x64/data/obj.names
+!datasets/x64/data/obj-nice.names
+!datasets/x64/data/obj-short.names
+!datasets/x64/data/obj-verbose.names
+!datasets/x64/data/train.txt
+!datasets/x64/data/valid.txt
+
+# USELESS DIRECTORIES
+*.idea*
+*__pycache__*
+
+# EXTENTIONS
+*.pyproj
