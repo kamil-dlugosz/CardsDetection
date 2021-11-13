@@ -55,9 +55,10 @@ remember to use '/' instead of '\'
 python3.8 -m virtualenv env_default
 
 # test darknet photo and video (in darknet folder)
-python darknet_images.py --input /home/kamil/Beng/python-scripts/datasets/test_dataset --weights /home/kamil/Beng/model/yolo.weights --config_file /home/kamil/Beng/darknet/build/darknet/x64/yolo-obj.cfg --data_file /home/kamil/Beng/darknet/build/darknet/x64/data/obj.data
+python darknet_images.py --input /home/kamil/Beng/datasets/test_dataset --weights /home/kamil/Beng/model_30_09_2021/yolo-obj_best.weights --config_file /home/kamil/Beng/darknet/build/darknet/x64/yolo-obj.cfg --data_file /home/kamil/Beng/darknet/build/darknet/x64/data/obj.data
 
-python darknet_video.py --input 0 --weights /home/kamil/Beng/model/yolo.weights --config_file /home/kamil/Beng/darknet/build/darknet/x64/yolo-obj.cfg --data_file /home/kamil/Beng/darknet/build/darknet/x64/data/obj.data
+python darknet_video.py --input 0 --weights /home/kamil/Beng/model_30_09_2021/yolo-obj_best.weights --config_file /home/kamil/Beng/darknet/build/darknet/x64/yolo-obj.cfg --data_file /home/kamil/Beng/darknet/build/darknet/x64/data/obj.data
+
 
 
 ### IMPORTANT LINKS ###

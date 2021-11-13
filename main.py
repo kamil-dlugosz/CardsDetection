@@ -1,12 +1,13 @@
 from ctypes import *
-import random
 import os
+import random
 import cv2
 import time
 from darknet import darknet
 import argparse
 from threading import Thread, enumerate
 from queue import Queue
+from game import game
 
 
 def parser():
@@ -97,8 +98,8 @@ def drawing(frame_queue, detections_queue, fps_queue):
         detections = detections_queue.get()
         fps = fps_queue.get()
         if frame_resized is not None:
-            # image = darknet.draw_boxes(detections, frame_resized, class_colors)
-            print(detections)
+            image = darknet.draw_boxes(detections, frame_resized, class_colors)
+            image = game.draw(image, detections)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             if args.out_filename is not None:
                 video.write(image)
@@ -109,6 +110,24 @@ def drawing(frame_queue, detections_queue, fps_queue):
     cap.release()
     video.release()
     cv2.destroyAllWindows()
+
+
+# def find_cards_centers(detections):
+#     detections = sorted(detections, key=lambda d: d[0])
+#     cards = dict()
+#     previous = None
+#     for current in detections:
+#         try:
+#             c_class, c_confidence, (cx, cy, cw, ch) = current
+#             p_class, p_confidence, (px, py, pw, ph) = previous
+#         except TypeError:
+#             continue
+#         else:
+#             if p_class == c_class:
+#                 cards[p_class] = dict(x1=cx, y1=cy, w1=cw, h1=ch,
+#                                       x2=px, y2=py, w2=pw, h2=ph)
+#         finally:
+#             previous = current
 
 
 if __name__ == '__main__':
@@ -128,7 +147,7 @@ if __name__ == '__main__':
     width = darknet.network_width(network)
     height = darknet.network_height(network)
     input_path = str2int(args.input)
-    cap = cv2.VideoCapture(input_path)
+    cap = cv2.VideoCapture(2)
     Thread(target=video_capture, args=(frame_queue, darknet_image_queue)).start()
     Thread(target=inference, args=(darknet_image_queue, detections_queue, fps_queue)).start()
     Thread(target=drawing, args=(frame_queue, detections_queue, fps_queue)).start()
