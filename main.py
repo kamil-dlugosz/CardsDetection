@@ -56,7 +56,7 @@ def check_arguments_errors(args):
 
 def set_saved_video(input_video, output_video, size):
     fourcc = cv2.VideoWriter_fourcc(*"MJPG")
-    fps = int(input_video.get(cv2.CAP_PROP_FPS))
+    fps = input_video.get(cv2.CAP_PROP_FPS)
     video = cv2.VideoWriter(output_video, fourcc, fps, size)
     return video
 
@@ -85,7 +85,7 @@ def inference(darknet_image_queue, detections_queue, fps_queue):
         fps = int(1/(time.time() - prev_time))
         fps_queue.put(fps)
         print("FPS: {}".format(fps))
-        darknet.print_detections(detections, args.ext_output)
+        # darknet.print_detections(detections, args.ext_output)
         darknet.free_image(darknet_image)
     cap.release()
 

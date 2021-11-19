@@ -1,23 +1,27 @@
 import cv2
 import os
+import numpy as np
+from PIL import Image, ImageDraw
+from math import copysign
 
 
-def batch_int(*args):
-    return tuple(int(a) for a in args)
+CARD_COS = 0.5812381937190965
+CARD_SIN = 0.813733471206735
 
 
 class Game:
     def __init__(self):
         self.state = 'calm'
+        self.score_1 = 0
+        self.score_2 = 0
         self.placeholders = dict()
+        self.msg = list()
         for filename in os.listdir('../placeholder-cards'):
             key = os.path.splitext(filename)[0]
             file_path = os.path.join(os.getcwd(), '..', 'placeholder-cards', filename)
-            image = cv2.imread(file_path, flags=-2)
-            image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGBA)
+            image = Image.open(file_path)
+            image = image.convert(mode='RGBA')
             self.placeholders[key] = image
-        self.score_1 = 0
-        self.score_2 = 0
         self.cards_power = {
             'AH': 14,     'AD': 14,     'AC': 14,     'AS': 14,
             'KH': 13,     'KD': 13,     'KC': 13,     'KS': 13,
@@ -49,11 +53,26 @@ class Game:
         #     '2H': False,  '2D': False,  '2C': False,  '2S': False,
         # }
 
+    def batch_int(self, *args):
+        """    Cast floats to ints.    """
+        return tuple(int(a) for a in args)
+
+    def sort_boxes(self, box1, box2):
+        """    Sort 2 yolo bounding boxes by y value (upper point is first).    """
+        _, y1, _, _ = box1
+        _, y2, _, _ = box2
+        if y1 < y2:
+            return box1, box2
+        else:
+            return box2, box1
+
     def group_cards(self, detections):
+        """    Create dict containing both detections of corners for each card.    """
         cards = dict()
         for name, confidence, (x, y, w, h) in detections:
             if name not in cards:
                 cards[name] = list()
+            # x, y, w, h = self.batch_int(x, y, w, h)
             cards[name].append((x, y, w, h))
         return cards
 
@@ -64,6 +83,7 @@ class Game:
     #         past_detection = self.cards_detections[name]
 
     def assign_cards_to_players(self, cards, threshold):
+        """   Divide cards to two lists, one for each player based on treshold.   """
         p1_cards, p2_cards = list(), list()
         for name, boxes in cards.items():
             try:
@@ -71,13 +91,15 @@ class Game:
                 (_, y2, _, _) = boxes[1]
             except IndexError:
                 continue
+            card = name, *self.sort_boxes(boxes[0], boxes[1])
             if (y1 + y2)/2 < threshold:
-                p1_cards.append((name, *cards[name]))
+                p1_cards.append(card)
             else:
-                p2_cards.append((name, *cards[name]))
+                p2_cards.append(card)
         return p1_cards, p2_cards
 
     def count_points(self, p1_cards, p2_cards):
+        """    Count points for each player and change state of game.    """
         if self.state == 'calm' and len(p1_cards) == len(p2_cards) == 1:
             self.state = 'fight'
             p1_card, p2_card = p1_cards[0], p2_cards[0]
@@ -89,59 +111,152 @@ class Game:
             #     self.state = 'war'
         elif len(p1_cards) + len(p2_cards) > 2:
             self.state = 'too_many'
-        else:
+        elif len(p1_cards) + len(p2_cards) == 0:
             self.state = 'calm'
 
     def step(self, image, detections):
+        """   Make game step.   """
+        self.msg.clear()
         cards = self.group_cards(detections)
         p1_cards, p2_cards = self.assign_cards_to_players(cards, image.shape[1]/2)
         self.count_points(p1_cards, p2_cards)
         return self.draw(image, p1_cards, p2_cards)
 
+    def rotate_pv(self, point, angle=np.pi/2, cos=None, sin=None, origin=(0, 0)):
+        """    Rotate a point counter-clockwise by a given angle (radians) around a given origin.    """
+        if point.shape != (2,):
+            raise UserWarning
+        ox, oy = origin
+        px, py = point
+
+        if cos is None or sin is None:
+            cos = np.cos(angle)
+            sin = np.sin(angle)
+
+        qx = ox + cos * (px - ox) - sin * (py - oy)
+        qy = oy + sin * (px - ox) + cos * (py - oy)
+
+        return np.array([qx, qy])
+
+    def unit_vector(self, *args):
+        """    Return unit vector from given vector.    """
+        vector = np.array(args)
+        return vector / np.linalg.norm(vector)
+
+    def card_rect(self, x1, y1, x3, y3):
+        """    Return card vectors and corners.    """
+        diagonal_vector = np.array([x3 - x1, y3 - y1])
+        diagonal = np.linalg.norm(diagonal_vector)
+
+        short_vector = self.rotate_pv(point=diagonal_vector, cos=CARD_COS, sin=-CARD_SIN)
+        short_vector = self.unit_vector(*short_vector)*diagonal*CARD_COS
+
+        long_vector = self.rotate_pv(point=diagonal_vector, cos=CARD_SIN, sin=CARD_COS)
+        long_vector = self.unit_vector(*long_vector)*diagonal*CARD_SIN
+
+        x2, y2 = (x1, y1) + long_vector
+        x4, y4 = (x1, y1) + short_vector
+
+        return (diagonal_vector, short_vector, long_vector), ((x1, y1), (x2, y2), (x3, y3), (x4, y4))
+
+    def card_angle(self, normal_vector):
+        """    Calculate angle of whole card rotation.    """
+        # Init unit vectors, those axes are perpendicular, both axes are rotated, so angle when card is staight is 0*
+        # x_axis_vector = self.unit_vector(3.5, -2.5)
+        # y_axis_vector = self.unit_vector(2.5, 3.5)
+        # card_vector = self.unit_vector(*args)
+        x_axis_vector = self.unit_vector(1, 0)
+        y_axis_vector = self.unit_vector(0, 1)
+        normal_vector = self.unit_vector(*normal_vector)
+
+        # Dot product of two vectors => cosinus of angle, ensure that cosinus is in [-1, 1]
+        cosinus_x = np.dot(x_axis_vector, normal_vector)
+        cosinus_x = np.clip(cosinus_x, -1.0, 1.0)
+        cosinus_y = np.dot(y_axis_vector, normal_vector)
+        cosinus_y = np.clip(cosinus_y, -1.0, 1.0)
+
+        # Calculate angle and it's sign
+        sign = cosinus_x
+        value = np.degrees(np.arccos(cosinus_y))
+        angle = copysign(value, sign)
+
+        self.msg.append(f"angle = {round(angle, 2):<5}*")
+        self.msg.append(f"value = {round(value, 2):<5}*")
+        self.msg.append(f"sign  = {round(sign, 2):<5}*")
+
+        return angle
+
     def draw(self, image, p1_cards, p2_cards):
+        """    Draw game specific items on image.    """
         # detections = self.smooth_detection(detections)
-        hi, wi, ci = image.shape
-        padded_image = cv2.copyMakeBorder(src=image, top=hi, bottom=hi, left=wi, right=wi,
-                                          borderType=cv2.BORDER_CONSTANT, value=0)
-        for name, (x0, y0, w0, h0), (x1, y1, w1, h1) in p1_cards + p2_cards:
-            x0, x1, y0, y1, w0, w1, h0, h1 = batch_int(x0, x1, y0, y1, w0, w1, h0, h1)
-            xl, xr, yt, yd = min(x0-w0, x1-w1), max(x0+w0, x1+w1), min(y0-h0, y1-h1), max(y0+h0, y1+h1)
+        # Convert to PIL
+        image = Image.fromarray(image)
+        wi, hi = image.size
 
+        # Pad image with black (so cards can be easily pasted outside image bounds)
+        padded_image = Image.new(mode='RGBA', size=(wi*3, hi*3), color=(0, 0, 0, 0))
+        padded_image.paste(im=image, box=(wi, hi))
+
+        # Paste cards to padded image
+        for name, (x1, y1, w1, h1), (x3, y3, w3, h3) in p1_cards + p2_cards:
+            # Find bounding box of whole card
+            left, right, top, bottom = self.batch_int(min(x1-w1, x3-w3), max(x1+w1, x3+w3),
+                                                      min(y1-h1, y3-h3), max(y1+h1, y3+h3))
+            (diagonal_vector, short_vector, long_vector), ((x1, y1), (x2, y2), (x3, y3), (x4, y4)) \
+                = self.card_rect(x1, y1, x3, y3)
+
+            # Get, rotate and resize card placeholder
+            angle = self.card_angle(long_vector)
             placeholder = self.placeholders[name].copy()
-            placeholder = cv2.resize(src=placeholder, dsize=(xr-xl, yd-yt))
+            placeholder = placeholder.resize(size=(right-left, bottom-top))
+            placeholder = placeholder.rotate(angle=angle,
+                                             expand=True, fillcolor=(0, 0, 0, 0))
+            # Cover card with placeholder
+            padded_image.alpha_composite(im=placeholder, dest=(wi+left, hi+top))
 
-            alpha = placeholder[:, :, 3] / 255.0
-            beta = 1.0 - alpha
-            for channel in range(0, 3):
-                padded_image[yt+hi:yd+hi, xl+wi:xr+wi, channel] = \
-                    (alpha * placeholder[:, :, channel] + beta * padded_image[yt+hi:yd+hi, xl+wi:xr+wi, channel])
-        image = padded_image[hi:hi*2, wi:wi*2]
+            # Draw bouiding boxes of card and placeholder
+            drawer = ImageDraw.Draw(padded_image)
+            drawer.rectangle(xy=(wi+left, hi+top, wi+right, hi+bottom), outline="red")
+            drawer.ellipse(xy=(wi+x1-5, hi+y1-5, wi+x1+5, hi+y1+5), outline="blue")
+            drawer.ellipse(xy=(wi+x2-5, hi+y2-5, wi+x2+5, hi+y2+5), outline="yellow")
+            drawer.ellipse(xy=(wi+x3-5, hi+y3-5, wi+x3+5, hi+y3+5), outline="green")
+            drawer.ellipse(xy=(wi+x4-5, hi+y4-5, wi+x4+5, hi+y4+5), outline="purple")
 
-        image = cv2.resize(src=image, dsize=(image.shape[0]*2, image.shape[1]*2))
-        hi, wi = hi*2, wi*2
+        # Crop image from padded image
+        image = padded_image.crop(box=(wi, hi, wi*2, hi*2))
 
-        # HUD
+        # Double size
+        image = image.resize(size=(wi*2, hi*2))
+        wi, hi = image.size
+
+        # Convert back to OpenCV
+        image = np.asarray(a=image)
+
+        # Draw HUD
         image = cv2.line(img=image, pt1=(0, int(hi/2)), pt2=(wi-1, int(hi/2)), color=(150, 20, 150), thickness=6)
-        image = cv2.putText(img=image, text=f"state: {self.state}", org=(wi-200, 20),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.5, color=(150, 20, 150))
+        image = cv2.putText(img=image, text=f"state: {self.state}", org=(wi-200, 30),
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.6, color=(150, 20, 150), thickness=2)
+        for i, temp in enumerate(self.msg):
+            image = cv2.putText(img=image, text=temp, org=(50, 300+30*i),
+                                fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1.2, color=(100, 0, 100), thickness=2)
 
-        # Player 1
-        image = cv2.putText(img=image, text=f"player 1 score: {self.score_1}", org=(10, 20),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.7, color=(50, 180, 15))
+        # Draw Player 1
+        image = cv2.putText(img=image, text=f"player 1 score: {self.score_1}", org=(10, 40),
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(50, 180, 15), thickness=2)
         p1_cards_names = list()
         for name, _, _ in p1_cards:
             p1_cards_names.append(name)
-        image = cv2.putText(img=image, text=f"player 1 cards: {' '.join(p1_cards_names)}", org=(10, 40),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.5, color=(50, 180, 15))
+        image = cv2.putText(img=image, text=f"cards: {' '.join(p1_cards_names)}", org=(10, 80),
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.8, color=(50, 180, 15), thickness=2)
 
-        # Player 2
+        # Draw Player 2
         image = cv2.putText(img=image, text=f"player 2 score: {self.score_2}", org=(10, hi-20),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.7, color=(180, 15, 50))
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(220, 50, 80), thickness=2)
         p2_cards_names = list()
         for name, _, _ in p2_cards:
             p2_cards_names.append(name)
-        image = cv2.putText(img=image, text=f"player 2 cards: {' '.join(p2_cards_names)}", org=(10, hi-40),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.5, color=(180, 15, 50))
+        image = cv2.putText(img=image, text=f"cards: {' '.join(p2_cards_names)}", org=(10, hi-60),
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.8, color=(220, 50, 80), thickness=2)
 
         return image
 
