@@ -3,11 +3,12 @@ import os
 import random
 import cv2
 import time
-from darknet import darknet
+import pickle
 import argparse
+from darknet import darknet
 from threading import Thread, enumerate
 from queue import Queue
-from game import game
+from game import game, cvt_detections
 
 
 def parser():
@@ -67,10 +68,9 @@ def video_capture(frame_queue, darknet_image_queue):
         if not ret:
             break
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame_resized = cv2.resize(frame_rgb, (width, height),
-                                   interpolation=cv2.INTER_LINEAR)
-        frame_queue.put(frame_resized)
-        img_for_detect = darknet.make_image(width, height, 3)
+        frame_queue.put(frame_rgb)
+        frame_resized = cv2.resize(frame_rgb, (darknet_width, darknet_height), interpolation=cv2.INTER_LINEAR)
+        img_for_detect = darknet.make_image(darknet_width, darknet_height, 3)
         darknet.copy_image_from_bytes(img_for_detect, frame_resized.tobytes())
         darknet_image_queue.put(img_for_detect)
     cap.release()
@@ -81,10 +81,11 @@ def inference(darknet_image_queue, detections_queue, fps_queue):
         darknet_image = darknet_image_queue.get()
         prev_time = time.time()
         detections = darknet.detect_image(network, class_names, darknet_image, thresh=args.thresh)
+        detections = cvt_detections(detections, in_size=(darknet_width, darknet_height))
         detections_queue.put(detections)
         fps = int(1/(time.time() - prev_time))
         fps_queue.put(fps)
-        print("FPS: {}".format(fps))
+        # print("FPS: {}".format(fps))
         # darknet.print_detections(detections, args.ext_output)
         darknet.free_image(darknet_image)
     cap.release()
@@ -92,13 +93,17 @@ def inference(darknet_image_queue, detections_queue, fps_queue):
 
 def drawing(frame_queue, detections_queue, fps_queue):
     random.seed(3)  # deterministic bbox colors
-    video = set_saved_video(cap, args.out_filename, (width, height))
+    video = set_saved_video(cap, args.out_filename, (darknet_width, darknet_height))
     while cap.isOpened():
         image = frame_queue.get()
+        h, w, _ = image.shape
         detections = detections_queue.get()
+        detections = cvt_detections(detections, out_size=(w, h))
         fps = fps_queue.get()
         if image is not None:
-            image = darknet.draw_boxes(detections, image, class_colors)
+            # image = darknet.draw_boxes(detections, image, class_colors)
+            # with open('../det_img.pickle', 'wb') as handle:
+            #     pickle.dump((detections, image), handle, protocol=pickle.HIGHEST_PROTOCOL)
             image = game.step(image, detections)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             if args.out_filename is not None:
@@ -126,10 +131,10 @@ if __name__ == '__main__':
             args.weights,
             batch_size=1
         )
-    width = darknet.network_width(network)
-    height = darknet.network_height(network)
+    darknet_width = darknet.network_width(network)
+    darknet_height = darknet.network_height(network)
     input_path = str2int(args.input)
-    cap = cv2.VideoCapture(2)
+    cap = cv2.VideoCapture(0)
     Thread(target=video_capture, args=(frame_queue, darknet_image_queue)).start()
     Thread(target=inference, args=(darknet_image_queue, detections_queue, fps_queue)).start()
     Thread(target=drawing, args=(frame_queue, detections_queue, fps_queue)).start()

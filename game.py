@@ -9,6 +9,17 @@ CARD_COS = 0.5812381937190965
 CARD_SIN = 0.813733471206735
 
 
+def cvt_detections(detections, in_size=(1, 1), out_size=(1, 1)):
+    """    Specify out_size (w, h) to convert from relative to absolute, in_size to vice versa.    """
+    new_detections = list()
+    ratio_x, ratio_y = out_size[0] / in_size[0], out_size[1] / in_size[1]
+    for name, confidence, (x, y, w, h) in detections:
+        new_detection = name, confidence, (x * ratio_x, y * ratio_y, w * ratio_x, h * ratio_y)
+        new_detections.append(new_detection)
+    return new_detections
+
+
+
 class Game:
     def __init__(self):
         self.state = 'calm'
@@ -57,30 +68,14 @@ class Game:
         """    Cast floats to ints.    """
         return tuple(int(a) for a in args)
 
-    def sort_boxes(self, box1, box2):
-        """    Sort 2 yolo bounding boxes by y value (upper point is first).    """
-        _, y1, _, _ = box1
-        _, y2, _, _ = box2
-        if y1 < y2:
-            return box1, box2
-        else:
-            return box2, box1
-
     def group_cards(self, detections):
         """    Create dict containing both detections of corners for each card.    """
         cards = dict()
         for name, confidence, (x, y, w, h) in detections:
             if name not in cards:
                 cards[name] = list()
-            # x, y, w, h = self.batch_int(x, y, w, h)
             cards[name].append((x, y, w, h))
         return cards
-
-    # def smooth_detection(self, detections):
-    #     smooth_level = 2
-    #     smoothed_detections = dict()
-    #     for name, _, (x, y, w, h) in detections:
-    #         past_detection = self.cards_detections[name]
 
     def assign_cards_to_players(self, cards, threshold):
         """   Divide cards to two lists, one for each player based on treshold.   """
@@ -91,7 +86,7 @@ class Game:
                 (_, y2, _, _) = boxes[1]
             except IndexError:
                 continue
-            card = name, *self.sort_boxes(boxes[0], boxes[1])
+            card = name, *sorted(boxes, key=lambda x: x[1])
             if (y1 + y2)/2 < threshold:
                 p1_cards.append(card)
             else:
@@ -114,8 +109,15 @@ class Game:
         elif len(p1_cards) + len(p2_cards) == 0:
             self.state = 'calm'
 
+    # def smooth_detection(self, detections):
+    #     smooth_level = 2
+    #     smoothed_detections = dict()
+    #     for name, _, (x, y, w, h) in detections:
+    #         past_detection = self.cards_detections[name]
+
     def step(self, image, detections):
         """   Make game step.   """
+        # detections = self.smooth_detection(detections)
         self.msg.clear()
         cards = self.group_cards(detections)
         p1_cards, p2_cards = self.assign_cards_to_players(cards, image.shape[1]/2)
@@ -149,22 +151,30 @@ class Game:
         diagonal = np.linalg.norm(diagonal_vector)
 
         short_vector = self.rotate_pv(point=diagonal_vector, cos=CARD_COS, sin=-CARD_SIN)
-        short_vector = self.unit_vector(*short_vector)*diagonal*CARD_COS
+        short_side = diagonal*CARD_COS
+        short_vector = self.unit_vector(*short_vector) * short_side
 
         long_vector = self.rotate_pv(point=diagonal_vector, cos=CARD_SIN, sin=CARD_COS)
-        long_vector = self.unit_vector(*long_vector)*diagonal*CARD_SIN
+        long_side = diagonal*CARD_SIN
+        long_vector = self.unit_vector(*long_vector) * long_side
+
+        c = (x1 + x3)/2, (y1 + y3)/2
 
         x2, y2 = (x1, y1) + long_vector
         x4, y4 = (x1, y1) + short_vector
 
-        return (diagonal_vector, short_vector, long_vector), ((x1, y1), (x2, y2), (x3, y3), (x4, y4))
+        if long_vector[1] <= 0:
+            normal_vector = long_vector * (-1)
+        else:
+            normal_vector = long_vector
+
+        return (normal_vector, diagonal_vector, short_vector, long_vector), \
+               ((x1, y1), (x2, y2), (x3, y3), (x4, y4), c), \
+               (short_side, long_side)
 
     def card_angle(self, normal_vector):
         """    Calculate angle of whole card rotation.    """
         # Init unit vectors, those axes are perpendicular, both axes are rotated, so angle when card is staight is 0*
-        # x_axis_vector = self.unit_vector(3.5, -2.5)
-        # y_axis_vector = self.unit_vector(2.5, 3.5)
-        # card_vector = self.unit_vector(*args)
         x_axis_vector = self.unit_vector(1, 0)
         y_axis_vector = self.unit_vector(0, 1)
         normal_vector = self.unit_vector(*normal_vector)
@@ -180,15 +190,10 @@ class Game:
         value = np.degrees(np.arccos(cosinus_y))
         angle = copysign(value, sign)
 
-        self.msg.append(f"angle = {round(angle, 2):<5}*")
-        self.msg.append(f"value = {round(value, 2):<5}*")
-        self.msg.append(f"sign  = {round(sign, 2):<5}*")
-
         return angle
 
     def draw(self, image, p1_cards, p2_cards):
         """    Draw game specific items on image.    """
-        # detections = self.smooth_detection(detections)
         # Convert to PIL
         image = Image.fromarray(image)
         wi, hi = image.size
@@ -199,28 +204,37 @@ class Game:
 
         # Paste cards to padded image
         for name, (x1, y1, w1, h1), (x3, y3, w3, h3) in p1_cards + p2_cards:
-            # Find bounding box of whole card
-            left, right, top, bottom = self.batch_int(min(x1-w1, x3-w3), max(x1+w1, x3+w3),
-                                                      min(y1-h1, y3-h3), max(y1+h1, y3+h3))
-            (diagonal_vector, short_vector, long_vector), ((x1, y1), (x2, y2), (x3, y3), (x4, y4)) \
-                = self.card_rect(x1, y1, x3, y3)
+            # Find vectors, vertices and sides of whole card
+            vectors, points, sides = self.card_rect(x1, y1, x3, y3)
+            (x1, y1), (x2, y2), (x3, y3), (x4, y4), c = points
+            left, right, top, bottom = self.batch_int(min(x1, x2, x3, x4), max(x1, x2, x3, x4),
+                                                      min(y1, y2, y3, y4), max(y1, y2, y3, y4))
 
             # Get, rotate and resize card placeholder
-            angle = self.card_angle(long_vector)
+            short_side, long_side = sides
+            short_side, long_side = self.batch_int(short_side * 1.5, long_side * 1.5)
+            normal_vector, _, _, _ = vectors
+            angle = self.card_angle(normal_vector)
             placeholder = self.placeholders[name].copy()
-            placeholder = placeholder.resize(size=(right-left, bottom-top))
-            placeholder = placeholder.rotate(angle=angle,
-                                             expand=True, fillcolor=(0, 0, 0, 0))
-            # Cover card with placeholder
-            padded_image.alpha_composite(im=placeholder, dest=(wi+left, hi+top))
+            placeholder = placeholder.resize(size=(short_side, long_side))
+            placeholder = placeholder.rotate(angle=angle, expand=True, fillcolor=(0, 0, 0, 0))
 
-            # Draw bouiding boxes of card and placeholder
-            drawer = ImageDraw.Draw(padded_image)
-            drawer.rectangle(xy=(wi+left, hi+top, wi+right, hi+bottom), outline="red")
-            drawer.ellipse(xy=(wi+x1-5, hi+y1-5, wi+x1+5, hi+y1+5), outline="blue")
-            drawer.ellipse(xy=(wi+x2-5, hi+y2-5, wi+x2+5, hi+y2+5), outline="yellow")
-            drawer.ellipse(xy=(wi+x3-5, hi+y3-5, wi+x3+5, hi+y3+5), outline="green")
-            drawer.ellipse(xy=(wi+x4-5, hi+y4-5, wi+x4+5, hi+y4+5), outline="purple")
+            cv2.imshow('placeholder', cv2.cvtColor(np.array(placeholder), cv2.COLOR_RGB2BGR))
+
+            # Cover card with placeholder
+            xc, yc = c
+            offset_x, offset_y = placeholder.size[0]/2, placeholder.size[1]/2
+            xc, yc = self.batch_int(xc - offset_x + wi, yc - offset_y + hi)
+            padded_image.alpha_composite(im=placeholder, dest=(xc, yc))
+
+            # Draw rect vertices
+            # drawer = ImageDraw.Draw(padded_image)
+            # drawer.ellipse(xy=(wi+left-1, hi+top-1, wi+left+1, hi+top+1), outline="red")
+            # drawer.ellipse(xy=(wi+left-3, hi+top-3, wi+left+3, hi+top+3), outline="red")
+            # drawer.ellipse(xy=(wi+x1-2, hi+y1-2, wi+x1+2, hi+y1+2), outline="blue")
+            # drawer.ellipse(xy=(wi+x2-2, hi+y2-2, wi+x2+2, hi+y2+2), outline="yellow")
+            # drawer.ellipse(xy=(wi+x3-2, hi+y3-2, wi+x3+2, hi+y3+2), outline="green")
+            # drawer.ellipse(xy=(wi+x4-2, hi+y4-2, wi+x4+2, hi+y4+2), outline="orange")
 
         # Crop image from padded image
         image = padded_image.crop(box=(wi, hi, wi*2, hi*2))
