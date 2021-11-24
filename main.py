@@ -134,7 +134,7 @@ if __name__ == '__main__':
     darknet_width = darknet.network_width(network)
     darknet_height = darknet.network_height(network)
     input_path = str2int(args.input)
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(2)
     Thread(target=video_capture, args=(frame_queue, darknet_image_queue)).start()
     Thread(target=inference, args=(darknet_image_queue, detections_queue, fps_queue)).start()
     Thread(target=drawing, args=(frame_queue, detections_queue, fps_queue)).start()

@@ -1,7 +1,7 @@
 import cv2
 import os
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 from math import copysign
 
 
@@ -19,34 +19,28 @@ def cvt_detections(detections, in_size=(1, 1), out_size=(1, 1)):
     return new_detections
 
 
-
 class Game:
     def __init__(self):
-        self.state = 'calm'
+        self.state = ''
         self.score_1 = 0
         self.score_2 = 0
-        self.placeholders = dict()
+        self.placeholders1 = self.load_placeholders('/placeholder-cards1')
+        self.placeholders2 = self.load_placeholders('/placeholder-cards2')
         self.msg = list()
-        for filename in os.listdir('../placeholder-cards'):
-            key = os.path.splitext(filename)[0]
-            file_path = os.path.join(os.getcwd(), '..', 'placeholder-cards', filename)
-            image = Image.open(file_path)
-            image = image.convert(mode='RGBA')
-            self.placeholders[key] = image
         self.cards_power = {
-            'AH': 14,     'AD': 14,     'AC': 14,     'AS': 14,
-            'KH': 13,     'KD': 13,     'KC': 13,     'KS': 13,
-            'QH': 12,     'QD': 12,     'QC': 12,     'QS': 12,
-            'JH': 11,     'JD': 11,     'JC': 11,     'JS': 11,
-            'TH': 10,     'TD': 10,     'TC': 10,     'TS': 10,
-            '9H': 9,      '9D': 9,      '9C': 9,      '9S': 9,
-            '8H': 8,      '8D': 8,      '8C': 8,      '8S': 8,
-            '7H': 7,      '7D': 7,      '7C': 7,      '7S': 7,
-            '6H': 6,      '6D': 6,      '6C': 6,      '6S': 6,
-            '5H': 5,      '5D': 5,      '5C': 5,      '5S': 5,
-            '4H': 4,      '4D': 4,      '4C': 4,      '4S': 4,
-            '3H': 3,      '3D': 3,      '3C': 3,      '3S': 3,
-            '2H': 2,      '2D': 2,      '2C': 2,      '2S': 2,
+            'AH': 13,     'AD': 13,     'AC': 13,     'AS': 13,
+            'KH': 12,     'KD': 12,     'KC': 12,     'KS': 12,
+            'QH': 11,     'QD': 11,     'QC': 11,     'QS': 11,
+            'JH': 10,     'JD': 10,     'JC': 10,     'JS': 10,
+            'TH': 9,      'TD': 9,      'TC': 9,      'TS': 9,
+            '9H': 8,      '9D': 8,      '9C': 8,      '9S': 8,
+            '8H': 7,      '8D': 7,      '8C': 7,      '8S': 7,
+            '7H': 6,      '7D': 6,      '7C': 6,      '7S': 6,
+            '6H': 5,      '6D': 5,      '6C': 5,      '6S': 5,
+            '5H': 4,      '5D': 4,      '5C': 4,      '5S': 4,
+            '4H': 3,      '4D': 3,      '4C': 3,      '4S': 3,
+            '3H': 2,      '3D': 2,      '3C': 2,      '3S': 2,
+            '2H': 1,      '2D': 1,      '2C': 1,      '2S': 1,
         }
         # self.cards_detections = {
         #     'AH': False,  'AD': False,  'AC': False,  'AS': False,
@@ -64,6 +58,16 @@ class Game:
         #     '2H': False,  '2D': False,  '2C': False,  '2S': False,
         # }
 
+    def load_placeholders(self, directory):
+        placeholders = dict()
+        for filename in os.listdir(f"../{directory}"):
+            key = os.path.splitext(filename)[0]
+            file_path = f"{os.getcwd()}/..{directory}/{filename}"
+            image = Image.open(file_path)
+            image = image.convert(mode='RGBA')
+            placeholders[key] = image
+        return placeholders
+
     def batch_int(self, *args):
         """    Cast floats to ints.    """
         return tuple(int(a) for a in args)
@@ -78,7 +82,7 @@ class Game:
         return cards
 
     def assign_cards_to_players(self, cards, threshold):
-        """   Divide cards to two lists, one for each player based on treshold.   """
+        """    Divide cards to two lists, one for each player based on treshold.   """
         p1_cards, p2_cards = list(), list()
         for name, boxes in cards.items():
             try:
@@ -95,19 +99,20 @@ class Game:
 
     def count_points(self, p1_cards, p2_cards):
         """    Count points for each player and change state of game.    """
-        if self.state == 'calm' and len(p1_cards) == len(p2_cards) == 1:
-            self.state = 'fight'
+        if self.state == '' and len(p1_cards) == len(p2_cards) == 1:
             p1_card, p2_card = p1_cards[0], p2_cards[0]
             if self.cards_power[p1_card[0]] > self.cards_power[p2_card[0]]:
+                self.state = 'Player 1 scores!'
                 self.score_1 += 1
             elif self.cards_power[p1_card[0]] < self.cards_power[p2_card[0]]:
+                self.state = 'Player 2 scores!'
                 self.score_2 += 1
-            # else:
-            #     self.state = 'war'
+            else:
+                self.state = 'Pat'
         elif len(p1_cards) + len(p2_cards) > 2:
-            self.state = 'too_many'
+            self.state = 'Too many cards on table'
         elif len(p1_cards) + len(p2_cards) == 0:
-            self.state = 'calm'
+            self.state = ''
 
     # def smooth_detection(self, detections):
     #     smooth_level = 2
@@ -203,38 +208,28 @@ class Game:
         padded_image.paste(im=image, box=(wi, hi))
 
         # Paste cards to padded image
-        for name, (x1, y1, w1, h1), (x3, y3, w3, h3) in p1_cards + p2_cards:
+        for idx, (name, (x1, y1, w1, h1), (x3, y3, w3, h3)) in enumerate(p1_cards + p2_cards):
             # Find vectors, vertices and sides of whole card
             vectors, points, sides = self.card_rect(x1, y1, x3, y3)
-            (x1, y1), (x2, y2), (x3, y3), (x4, y4), c = points
-            left, right, top, bottom = self.batch_int(min(x1, x2, x3, x4), max(x1, x2, x3, x4),
-                                                      min(y1, y2, y3, y4), max(y1, y2, y3, y4))
+            _, _, _, _, c = points
 
             # Get, rotate and resize card placeholder
             short_side, long_side = sides
             short_side, long_side = self.batch_int(short_side * 1.5, long_side * 1.5)
             normal_vector, _, _, _ = vectors
             angle = self.card_angle(normal_vector)
-            placeholder = self.placeholders[name].copy()
+            if idx < len(p1_cards):
+                placeholder = self.placeholders1[name].copy()
+            else:
+                placeholder = self.placeholders2[name].copy()
             placeholder = placeholder.resize(size=(short_side, long_side))
             placeholder = placeholder.rotate(angle=angle, expand=True, fillcolor=(0, 0, 0, 0))
-
-            cv2.imshow('placeholder', cv2.cvtColor(np.array(placeholder), cv2.COLOR_RGB2BGR))
 
             # Cover card with placeholder
             xc, yc = c
             offset_x, offset_y = placeholder.size[0]/2, placeholder.size[1]/2
             xc, yc = self.batch_int(xc - offset_x + wi, yc - offset_y + hi)
             padded_image.alpha_composite(im=placeholder, dest=(xc, yc))
-
-            # Draw rect vertices
-            # drawer = ImageDraw.Draw(padded_image)
-            # drawer.ellipse(xy=(wi+left-1, hi+top-1, wi+left+1, hi+top+1), outline="red")
-            # drawer.ellipse(xy=(wi+left-3, hi+top-3, wi+left+3, hi+top+3), outline="red")
-            # drawer.ellipse(xy=(wi+x1-2, hi+y1-2, wi+x1+2, hi+y1+2), outline="blue")
-            # drawer.ellipse(xy=(wi+x2-2, hi+y2-2, wi+x2+2, hi+y2+2), outline="yellow")
-            # drawer.ellipse(xy=(wi+x3-2, hi+y3-2, wi+x3+2, hi+y3+2), outline="green")
-            # drawer.ellipse(xy=(wi+x4-2, hi+y4-2, wi+x4+2, hi+y4+2), outline="orange")
 
         # Crop image from padded image
         image = padded_image.crop(box=(wi, hi, wi*2, hi*2))
@@ -248,8 +243,8 @@ class Game:
 
         # Draw HUD
         image = cv2.line(img=image, pt1=(0, int(hi/2)), pt2=(wi-1, int(hi/2)), color=(150, 20, 150), thickness=6)
-        image = cv2.putText(img=image, text=f"state: {self.state}", org=(wi-200, 30),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.6, color=(150, 20, 150), thickness=2)
+        image = cv2.putText(img=image, text=f"{self.state}", org=(50, 450),
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1.5, color=(150, 20, 150), thickness=2)
         for i, temp in enumerate(self.msg):
             image = cv2.putText(img=image, text=temp, org=(50, 300+30*i),
                                 fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1.2, color=(100, 0, 100), thickness=2)
