@@ -85,7 +85,7 @@ def inference(darknet_image_queue, detections_queue, fps_queue):
         detections_queue.put(detections)
         fps = int(1/(time.time() - prev_time))
         fps_queue.put(fps)
-        # print("FPS: {}".format(fps))
+        print("FPS: {}".format(fps))
         # darknet.print_detections(detections, args.ext_output)
         darknet.free_image(darknet_image)
     cap.release()
@@ -118,7 +118,7 @@ def drawing(frame_queue, detections_queue, fps_queue):
 
 
 if __name__ == '__main__':
-    frame_queue = Queue()
+    frame_queue = Queue(maxsize=1)
     darknet_image_queue = Queue(maxsize=1)
     detections_queue = Queue(maxsize=1)
     fps_queue = Queue(maxsize=1)
@@ -134,7 +134,7 @@ if __name__ == '__main__':
     darknet_width = darknet.network_width(network)
     darknet_height = darknet.network_height(network)
     input_path = str2int(args.input)
-    cap = cv2.VideoCapture(2)
+    cap = cv2.VideoCapture(0)
     Thread(target=video_capture, args=(frame_queue, darknet_image_queue)).start()
     Thread(target=inference, args=(darknet_image_queue, detections_queue, fps_queue)).start()
     Thread(target=drawing, args=(frame_queue, detections_queue, fps_queue)).start()

@@ -82,7 +82,7 @@ class Game:
         return cards
 
     def assign_cards_to_players(self, cards, threshold):
-        """    Divide cards to two lists, one for each player based on treshold.   """
+        """    Divide cards to two lists, one for each player based on threshold.   """
         p1_cards, p2_cards = list(), list()
         for name, boxes in cards.items():
             try:
@@ -125,7 +125,7 @@ class Game:
         # detections = self.smooth_detection(detections)
         self.msg.clear()
         cards = self.group_cards(detections)
-        p1_cards, p2_cards = self.assign_cards_to_players(cards, image.shape[1]/2)
+        p1_cards, p2_cards = self.assign_cards_to_players(cards, image.shape[0]/2)
         self.count_points(p1_cards, p2_cards)
         return self.draw(image, p1_cards, p2_cards)
 
