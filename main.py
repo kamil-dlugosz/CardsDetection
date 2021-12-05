@@ -95,23 +95,47 @@ def drawing(frame_queue, detections_queue, fps_queue):
     random.seed(3)  # deterministic bbox colors
     video = set_saved_video(cap, args.out_filename, (darknet_width, darknet_height))
     while cap.isOpened():
-        image = frame_queue.get()
-        h, w, _ = image.shape
+        orig_image = frame_queue.get()
+        h, w, _ = orig_image.shape
         detections = detections_queue.get()
         detections = cvt_detections(detections, out_size=(w, h))
         fps = fps_queue.get()
-        if image is not None:
-            # image = darknet.draw_boxes(detections, image, class_colors)
+
+        if orig_image is not None:
+            dark_image = orig_image.copy()
+            dark_image = darknet.draw_boxes(detections, dark_image, class_colors)
+
             # with open('../det_img.pickle', 'wb') as handle:
             #     pickle.dump((detections, image), handle, protocol=pickle.HIGHEST_PROTOCOL)
-            image = game.step(image, detections)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+            augm_image = orig_image.copy()
+            augm_image = game.step(augm_image, detections)
+
+            orig_image = cv2.cvtColor(orig_image, cv2.COLOR_BGR2RGB)
+            augm_image = cv2.cvtColor(augm_image, cv2.COLOR_BGR2RGB)
+            dark_image = cv2.cvtColor(dark_image, cv2.COLOR_BGR2RGB)
+
             if args.out_filename is not None:
-                video.write(image)
+                video.write(augm_image)
             if not args.dont_show:
-                cv2.imshow('Inference', image)
-            if cv2.waitKey(fps) == 27:
+                cv2.imshow('orig', orig_image)
+                cv2.imshow('augm', augm_image)
+                cv2.imshow('dark', dark_image)
+            key = cv2.waitKey(fps)
+            if key == 27:  # Esc
                 break
+            if key == 113:  # q
+                game.score_1 += 1
+            if key == 97:  # a
+                game.score_1 -= 1
+            if key == 119:  # w
+                game.score_2 += 1
+            if key == 115:  # s
+                game.score_2 -= 1
+            elif key == 32:  # space
+                cv2.imwrite(f"screens/{time.time()}_orig.png", orig_image)
+                cv2.imwrite(f"screens/{time.time()}_augm.png", augm_image)
+                cv2.imwrite(f"screens/{time.time()}_dark.png", dark_image)
     cap.release()
     video.release()
     cv2.destroyAllWindows()

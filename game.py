@@ -109,8 +109,8 @@ class Game:
                 self.score_2 += 1
             else:
                 self.state = 'Pat'
-        elif len(p1_cards) + len(p2_cards) > 2:
-            self.state = 'Too many cards on table'
+        elif len(p1_cards) > 1 and  len(p2_cards) > 1:
+            self.state = 'Too many cards'
         elif len(p1_cards) + len(p2_cards) == 0:
             self.state = ''
 
@@ -215,7 +215,7 @@ class Game:
 
             # Get, rotate and resize card placeholder
             short_side, long_side = sides
-            short_side, long_side = self.batch_int(short_side * 1.5, long_side * 1.5)
+            short_side, long_side = self.batch_int(short_side * 1.4, long_side * 1.5)
             normal_vector, _, _, _ = vectors
             angle = self.card_angle(normal_vector)
             if idx < len(p1_cards):
@@ -235,7 +235,7 @@ class Game:
         image = padded_image.crop(box=(wi, hi, wi*2, hi*2))
 
         # Double size
-        image = image.resize(size=(wi*2, hi*2))
+        # image = image.resize(size=(wi*2, hi*2))
         wi, hi = image.size
 
         # Convert back to OpenCV
@@ -243,29 +243,29 @@ class Game:
 
         # Draw HUD
         image = cv2.line(img=image, pt1=(0, int(hi/2)), pt2=(wi-1, int(hi/2)), color=(150, 20, 150), thickness=6)
-        image = cv2.putText(img=image, text=f"{self.state}", org=(50, 450),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1.5, color=(150, 20, 150), thickness=2)
+        image = cv2.putText(img=image, text=f"{self.state}", org=(10, int(hi/2-hi/20)),
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=hi/832, color=(150, 20, 150), thickness=2)
         for i, temp in enumerate(self.msg):
-            image = cv2.putText(img=image, text=temp, org=(50, 300+30*i),
-                                fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1.2, color=(100, 0, 100), thickness=2)
+            image = cv2.putText(img=image, text=temp, org=(50, int(hi/2)-30*i),
+                                fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=hi/832, color=(100, 0, 100), thickness=2)
 
         # Draw Player 1
-        image = cv2.putText(img=image, text=f"player 1 score: {self.score_1}", org=(10, 40),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(50, 180, 15), thickness=2)
+        image = cv2.putText(img=image, text=f"player 1 score: {self.score_1}", org=(10, int(hi/20)),
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=hi/832, color=(50, 180, 15), thickness=2)
         p1_cards_names = list()
         for name, _, _ in p1_cards:
             p1_cards_names.append(name)
-        image = cv2.putText(img=image, text=f"cards: {' '.join(p1_cards_names)}", org=(10, 80),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.8, color=(50, 180, 15), thickness=2)
+        image = cv2.putText(img=image, text=f"cards: {' '.join(p1_cards_names)}", org=(10, int(hi/10)),
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=hi/832, color=(50, 180, 15), thickness=2)
 
         # Draw Player 2
-        image = cv2.putText(img=image, text=f"player 2 score: {self.score_2}", org=(10, hi-20),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(220, 50, 80), thickness=2)
+        image = cv2.putText(img=image, text=f"player 2 score: {self.score_2}", org=(10, int(hi-hi/20)),
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=hi/832, color=(220, 50, 80), thickness=2)
         p2_cards_names = list()
         for name, _, _ in p2_cards:
             p2_cards_names.append(name)
-        image = cv2.putText(img=image, text=f"cards: {' '.join(p2_cards_names)}", org=(10, hi-60),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.8, color=(220, 50, 80), thickness=2)
+        image = cv2.putText(img=image, text=f"cards: {' '.join(p2_cards_names)}", org=(10, int(hi-hi/10)),
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=hi/832, color=(220, 50, 80), thickness=2)
 
         return image
 
